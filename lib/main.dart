@@ -4,15 +4,14 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:verinni_os/core/config/supabase_config.dart';
 import 'package:verinni_os/core/services/auth_service.dart';
-import 'package:verinni_os/core/services/orcamento_service.dart';
-import 'package:verinni_os/core/services/frota_service.dart';
+import 'package:verinni_os/core/services/budget_service.dart';
 import 'package:verinni_os/core/theme/app_theme.dart';
 import 'package:verinni_os/core/utils/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Set preferred orientations
+  // Orientações permitidas
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -20,7 +19,7 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  // Configure status bar
+  // Estilo da barra de status
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -28,7 +27,7 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  // Initialize Supabase
+  // Inicializar Supabase — sem redirectUrl para suporte mobile nativo
   await Supabase.initialize(
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
@@ -46,8 +45,7 @@ class VerinniApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
-        ChangeNotifierProvider(create: (_) => OrcamentoService()),
-        ChangeNotifierProvider(create: (_) => FrotaService()),
+        ChangeNotifierProvider(create: (_) => BudgetService()),
       ],
       child: Builder(
         builder: (context) {
@@ -58,14 +56,14 @@ class VerinniApp extends StatelessWidget {
             theme: AppTheme.darkTheme,
             routerConfig: router,
             builder: (context, child) {
-              // Ensure text scale doesn't exceed 1.5 for factory use
+              // Limita escala de texto para ambiente industrial (0.85–1.5×)
               return MediaQuery(
                 data: MediaQuery.of(context).copyWith(
                   textScaler: TextScaler.linear(
-                    MediaQuery.of(context).textScaler.scale(1.0).clamp(
-                          0.8,
-                          1.5,
-                        ),
+                    MediaQuery.of(context)
+                        .textScaler
+                        .scale(1.0)
+                        .clamp(0.85, 1.5),
                   ),
                 ),
                 child: child ?? const SizedBox.shrink(),

@@ -82,7 +82,8 @@ GoRouter createRouter(BuildContext context) {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 64),
+            const Icon(Icons.error_outline,
+                color: Color(0xFFEF4444), size: 64),
             const SizedBox(height: 16),
             const Text(
               'Página não encontrada',
@@ -91,7 +92,8 @@ GoRouter createRouter(BuildContext context) {
             const SizedBox(height: 8),
             Text(
               state.error?.message ?? '404',
-              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+              style:
+                  const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
             ),
             const SizedBox(height: 24),
             ElevatedButton(

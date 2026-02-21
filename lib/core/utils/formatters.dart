@@ -22,6 +22,18 @@ class AppFormatters {
     return currency(double.tryParse(value) ?? 0.0);
   }
 
+  /// Formata valor compacto: 1.500 → R$ 1,5K ; 1.200.000 → R$ 1,2M
+  static String currencyCompact(double? value) {
+    if (value == null || value == 0) return 'R\$ 0';
+    if (value >= 1000000) {
+      return 'R\$ ${(value / 1000000).toStringAsFixed(1)}M';
+    }
+    if (value >= 1000) {
+      return 'R\$ ${(value / 1000).toStringAsFixed(1)}K';
+    }
+    return currency(value);
+  }
+
   static String date(DateTime? date) {
     if (date == null) return '--';
     return _dateFormatter.format(date);

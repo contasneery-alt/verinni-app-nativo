@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 import 'package:verinni_os/core/services/auth_service.dart';
-import 'package:verinni_os/core/services/orcamento_service.dart';
+import 'package:verinni_os/core/services/budget_service.dart';
 import 'package:verinni_os/core/theme/app_theme.dart';
 import 'package:verinni_os/shared/widgets/verinni_card.dart';
 
@@ -16,25 +15,32 @@ class OrcamentoFormScreen extends StatefulWidget {
 
 class _OrcamentoFormScreenState extends State<OrcamentoFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _clientNameController = TextEditingController();
-  final _clientEmailController = TextEditingController();
-  final _clientPhoneController = TextEditingController();
-  final _servicesController = TextEditingController();
-  final _notesController = TextEditingController();
-  final _totalController = TextEditingController();
+  final _obsController = TextEditingController();
+  final _valorVendaController = TextEditingController();
+  final _valorOriginalController = TextEditingController();
+  final _descontoController = TextEditingController();
+  final _validadeController = TextEditingController();
+
   bool _isLoading = false;
   String _status = 'pending';
+  String? _selectedClientId;
+  String? _selectedClientName;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<BudgetService>().loadClients();
+    });
+  }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _clientNameController.dispose();
-    _clientEmailController.dispose();
-    _clientPhoneController.dispose();
-    _servicesController.dispose();
-    _notesController.dispose();
-    _totalController.dispose();
+    _obsController.dispose();
+    _valorVendaController.dispose();
+    _valorOriginalController.dispose();
+    _descontoController.dispose();
+    _validadeController.dispose();
     super.dispose();
   }
 
@@ -44,25 +50,42 @@ class _OrcamentoFormScreenState extends State<OrcamentoFormScreen> {
     setState(() => _isLoading = true);
 
     final auth = context.read<AuthService>();
-    final svc = context.read<OrcamentoService>();
+    final svc = context.read<BudgetService>();
 
-    final data = {
-      'id': const Uuid().v4(),
-      'title': _titleController.text.trim(),
-      'client_name': _clientNameController.text.trim(),
-      'client_email': _clientEmailController.text.trim(),
-      'client_phone': _clientPhoneController.text.trim(),
-      'services': _servicesController.text.trim(),
-      'notes': _notesController.text.trim(),
-      'total_value': double.tryParse(
-              _totalController.text.replaceAll(',', '.')) ??
-          0.0,
+    final data = <String, dynamic>{
       'status': _status,
+      'observacoes': _obsController.text.trim().isEmpty
+          ? null
+          : _obsController.text.trim(),
       'created_by': auth.currentUser?.id,
-      'created_at': DateTime.now().toIso8601String(),
     };
 
-    final error = await svc.createOrcamento(data);
+    if (_selectedClientId != null) data['client_id'] = _selectedClientId;
+
+    final valorVenda = double.tryParse(
+        _valorVendaController.text.replaceAll(',', '.'));
+    if (valorVenda != null) data['valor_venda'] = valorVenda;
+
+    final valorOriginal = double.tryParse(
+        _valorOriginalController.text.replaceAll(',', '.'));
+    if (valorOriginal != null) data['valor_original'] = valorOriginal;
+
+    final desconto = double.tryParse(
+        _descontoController.text.replaceAll(',', '.'));
+    if (desconto != null && desconto > 0) data['desconto'] = desconto;
+
+    if (_validadeController.text.trim().isNotEmpty) {
+      try {
+        final parts = _validadeController.text.trim().split('/');
+        if (parts.length == 3) {
+          final dt = DateTime(int.parse(parts[2]), int.parse(parts[1]),
+              int.parse(parts[0]));
+          data['validade'] = dt.toIso8601String();
+        }
+      } catch (_) {}
+    }
+
+    final error = await svc.createBudget(data);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -84,6 +107,8 @@ class _OrcamentoFormScreenState extends State<OrcamentoFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final svc = context.watch<BudgetService>();
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Novo Orçamento')),
@@ -94,81 +119,108 @@ class _OrcamentoFormScreenState extends State<OrcamentoFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Client
               _FormSection(
-                title: 'Identificação',
+                title: 'Cliente',
                 children: [
-                  _buildField(
-                    controller: _titleController,
-                    label: 'Título do Orçamento *',
-                    hint: 'Ex: Revisão Completa - Ford F-250',
-                    validator: (v) =>
-                        v!.isEmpty ? 'Campo obrigatório' : null,
-                  ),
+                  svc.isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary, strokeWidth: 2))
+                      : svc.clients.isEmpty
+                          ? Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceElevated,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.info_outline,
+                                      color: AppColors.textMuted, size: 18),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Nenhum cliente cadastrado. Faça login para carregar os clientes.',
+                                      style: TextStyle(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 13),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : DropdownButtonFormField<String>(
+                              value: _selectedClientId,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Selecionar Cliente',
+                                prefixIcon: Icon(Icons.person_outline),
+                              ),
+                              dropdownColor: AppColors.surfaceElevated,
+                              style:
+                                  const TextStyle(color: AppColors.textPrimary),
+                              onChanged: (v) {
+                                setState(() {
+                                  _selectedClientId = v;
+                                  final c = svc.clients.firstWhere(
+                                    (c) => c['id'] == v,
+                                    orElse: () => {},
+                                  );
+                                  _selectedClientName =
+                                      c['name']?.toString();
+                                });
+                              },
+                              items: [
+                                const DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text(
+                                    '— Sem cliente vinculado —',
+                                    style: TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 13),
+                                  ),
+                                ),
+                                ...svc.clients.map((c) {
+                                  return DropdownMenuItem<String>(
+                                    value: c['id']?.toString(),
+                                    child: Text(
+                                      '${c['name'] ?? '--'}${c['cnpj'] != null ? '  (${c['cnpj']})' : ''}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                  if (_selectedClientName != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Selecionado: $_selectedClientName',
+                      style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 16),
 
+              // Financial
               _FormSection(
-                title: 'Dados do Cliente',
+                title: 'Valores',
                 children: [
                   _buildField(
-                    controller: _clientNameController,
-                    label: 'Nome do Cliente *',
-                    hint: 'Nome completo ou razão social',
-                    validator: (v) =>
-                        v!.isEmpty ? 'Campo obrigatório' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildField(
-                    controller: _clientEmailController,
-                    label: 'E-mail',
-                    hint: 'cliente@email.com',
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildField(
-                    controller: _clientPhoneController,
-                    label: 'Telefone',
-                    hint: '(00) 00000-0000',
-                    keyboardType: TextInputType.phone,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              _FormSection(
-                title: 'Detalhes do Serviço',
-                children: [
-                  _buildField(
-                    controller: _servicesController,
-                    label: 'Serviços *',
-                    hint: 'Descreva os serviços a serem realizados...',
-                    maxLines: 4,
-                    validator: (v) =>
-                        v!.isEmpty ? 'Campo obrigatório' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildField(
-                    controller: _notesController,
-                    label: 'Observações',
-                    hint: 'Informações adicionais...',
-                    maxLines: 3,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              _FormSection(
-                title: 'Financeiro',
-                children: [
-                  _buildField(
-                    controller: _totalController,
-                    label: 'Valor Total (R\$) *',
+                    controller: _valorVendaController,
+                    label: 'Valor de Venda (R\$) *',
                     hint: '0,00',
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     validator: (v) {
-                      if (v!.isEmpty) return 'Campo obrigatório';
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Campo obrigatório';
+                      }
                       if (double.tryParse(v.replaceAll(',', '.')) == null) {
                         return 'Valor inválido';
                       }
@@ -176,8 +228,45 @@ class _OrcamentoFormScreenState extends State<OrcamentoFormScreen> {
                     },
                   ),
                   const SizedBox(height: 12),
+                  _buildField(
+                    controller: _valorOriginalController,
+                    label: 'Valor Original (R\$)',
+                    hint: '0,00',
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildField(
+                    controller: _descontoController,
+                    label: 'Desconto (R\$)',
+                    hint: '0,00',
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Details
+              _FormSection(
+                title: 'Detalhes',
+                children: [
+                  _buildField(
+                    controller: _validadeController,
+                    label: 'Validade',
+                    hint: 'DD/MM/AAAA',
+                    keyboardType: TextInputType.datetime,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildField(
+                    controller: _obsController,
+                    label: 'Observações',
+                    hint: 'Informações adicionais...',
+                    maxLines: 4,
+                  ),
+                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: _status,
+                    value: _status,
                     onChanged: (v) => setState(() => _status = v!),
                     style: const TextStyle(color: AppColors.textPrimary),
                     dropdownColor: AppColors.surfaceElevated,
@@ -186,7 +275,12 @@ class _OrcamentoFormScreenState extends State<OrcamentoFormScreen> {
                       prefixIcon: Icon(Icons.flag_outlined),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'pending', child: Text('Pendente')),
+                      DropdownMenuItem(
+                          value: 'draft', child: Text('Rascunho')),
+                      DropdownMenuItem(
+                          value: 'pending', child: Text('Pendente')),
+                      DropdownMenuItem(
+                          value: 'sent', child: Text('Enviado')),
                       DropdownMenuItem(
                           value: 'approved', child: Text('Aprovado')),
                       DropdownMenuItem(
@@ -212,7 +306,8 @@ class _OrcamentoFormScreenState extends State<OrcamentoFormScreen> {
                       : const Icon(Icons.save_outlined, size: 20),
                   label: Text(
                     _isLoading ? 'Salvando...' : 'Salvar Orçamento',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),

@@ -542,7 +542,7 @@ class _LoginScreenState extends State<LoginScreen>
             onPressed: () async {
               final auth = context.read<AuthService>();
               final error =
-                  await auth.resetPassword(emailController.text);
+                  await auth.sendPasswordReset(emailController.text);
               if (!context.mounted) return;
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
